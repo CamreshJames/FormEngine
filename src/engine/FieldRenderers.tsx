@@ -1,22 +1,25 @@
+// FieldRenderers.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import type { FormField } from './types';
 
+// Base wrapper for fields with label and error display
 interface BaseProps {
     field: FormField;
     error?: string;
     children: React.ReactNode;
 }
 const Base = ({ field, error, children }: BaseProps) => (
-    <div className="field">
-        <label className="label">
+    <div className="field-container">
+        <label className="field-label">
             {field.label}
-            {field.rules?.required && <span className="req">*</span>}
+            {field.rules?.required && <span className="required">*</span>}
         </label>
         {children}
-        {error && <div className="error">{error}</div>}
+        {error && <div className="field-error">{error}</div>}
     </div>
 );
 
+// Generic props for renderers
 type RendererProps<T = any> = {
     field: FormField;
     value: T;
@@ -25,7 +28,7 @@ type RendererProps<T = any> = {
     onBlur?: () => void;
 };
 
-/* ---------- TEXT ---------- */
+// Text input renderer
 export const Text = ({ field, value, error, onChange, onBlur }: RendererProps<string>) => (
     <Base field={field} error={error}>
         <input
@@ -34,12 +37,12 @@ export const Text = ({ field, value, error, onChange, onBlur }: RendererProps<st
             onChange={e => onChange(e.target.value)}
             onBlur={onBlur}
             placeholder={field.placeholder}
-            className={error ? 'inp err' : 'inp'}
+            className={error ? 'text-input error' : 'text-input'}
         />
     </Base>
 );
 
-/* ---------- TEXTAREA ---------- */
+// Textarea renderer
 export const Textarea = ({ field, value, error, onChange, onBlur }: RendererProps<string>) => {
     const rows = field.props?.minRows ?? 3;
     return (
@@ -50,49 +53,49 @@ export const Textarea = ({ field, value, error, onChange, onBlur }: RendererProp
                 onBlur={onBlur}
                 rows={rows}
                 placeholder={field.placeholder}
-                className={error ? 'inp err' : 'inp'}
+                className={error ? 'textarea-input error' : 'textarea-input'}
             />
         </Base>
     );
 };
 
-/* ---------- SELECT ---------- */
+// Select renderer with dropdown
 export const Select = ({ field, value, error, onChange, onBlur }: {
     field: FormField; value: any; error?: string;
     onChange: (v: any) => void; onBlur?: () => void;
 }) => {
-    const opts = (field.props?.data ?? []).map(o =>
+    const options = (field.props?.data ?? []).map(o =>
         typeof o === 'string' ? { label: o, value: o } : o
     );
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const close = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        const handleClose = (event: MouseEvent) => {
+            if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
         };
-        if (open) document.addEventListener('mousedown', close);
-        return () => document.removeEventListener('mousedown', close);
+        if (open) document.addEventListener('mousedown', handleClose);
+        return () => document.removeEventListener('mousedown', handleClose);
     }, [open]);
 
-    const selected = opts.find(o => o.value === value)?.label ?? field.placeholder ?? 'Select…';
+    const selectedLabel = options.find(o => o.value === value)?.label ?? field.placeholder ?? 'Select…';
 
     return (
         <Base field={field} error={error}>
-            <div ref={ref} className="select">
-                <div className="trigger" onClick={() => setOpen(!open)}>
-                    <span>{selected}</span>
-                    <span className={open ? 'arrow open' : 'arrow'}>▼</span>
+            <div ref={ref} className="select-container">
+                <div className="select-trigger" onClick={() => setOpen(!open)}>
+                    <span className={value ? 'selected' : 'placeholder'}>{selectedLabel}</span>
+                    <span className={open ? 'select-arrow open' : 'select-arrow'}>▼</span>
                 </div>
                 {open && (
-                    <div className="dropdown">
-                        {opts.map((o, i) => (
+                    <div className="select-dropdown">
+                        {options.map((option, index) => (
                             <div
-                                key={i}
-                                className={`opt ${o.value === value ? 'sel' : ''}`}
-                                onClick={() => { onChange(o.value); setOpen(false); onBlur?.(); }}
+                                key={index}
+                                className={`select-option ${option.value === value ? 'selected' : ''}`}
+                                onClick={() => { onChange(option.value); setOpen(false); onBlur?.(); }}
                             >
-                                {o.label}
+                                {option.label}
                             </div>
                         ))}
                     </div>
@@ -102,42 +105,42 @@ export const Select = ({ field, value, error, onChange, onBlur }: {
     );
 };
 
-/* ---------- CHECKBOX ---------- */
+// Checkbox renderer
 export const Checkbox = ({ field, value, error, onChange, onBlur }: RendererProps<boolean>) => (
-    <div className="field">
-        <label className="chk">
+    <div className="field-container">
+        <label className="checkbox-container">
             <input
                 type="checkbox"
                 checked={!!value}
                 onChange={e => onChange(e.target.checked)}
                 onBlur={onBlur}
             />
-            <span>
+            <span className="checkbox-label">
                 {field.label}
-                {field.rules?.required && <span className="req">*</span>}
+                {field.rules?.required && <span className="required">*</span>}
             </span>
         </label>
-        {error && <div className="error">{error}</div>}
+        {error && <div className="field-error">{error}</div>}
     </div>
 );
 
-/* ---------- RADIO ---------- */
+// Radio group renderer
 export const Radio = ({ field, value, error, onChange, onBlur }: RendererProps<any>) => {
-    const opts = field.props?.options ?? [];
+    const options = field.props?.options ?? [];
     return (
         <Base field={field} error={error}>
             <div className="radio-group">
-                {opts.map((o: any, i: number) => (
-                    <label key={i} className="radio-opt">
+                {options.map((option: any, index: number) => (
+                    <label key={index} className="radio-option">
                         <input
                             type="radio"
                             name={field.id}
-                            value={o.value}
-                            checked={value === o.value}
-                            onChange={() => onChange(o.value)}
+                            value={option.value}
+                            checked={value === option.value}
+                            onChange={() => onChange(option.value)}
                             onBlur={onBlur}
                         />
-                        {o.label}
+                        <span className="radio-label">{option.label}</span>
                     </label>
                 ))}
             </div>
@@ -145,22 +148,23 @@ export const Radio = ({ field, value, error, onChange, onBlur }: RendererProps<a
     );
 };
 
-/* ---------- SWITCH ---------- */
+// Switch renderer
 export const Switch = ({ field, value, error, onChange, onBlur }: RendererProps<boolean>) => (
     <Base field={field} error={error}>
-        <label className="switch">
+        <label className="switch-container">
             <input
                 type="checkbox"
+                className="switch-input"
                 checked={!!value}
                 onChange={e => onChange(e.target.checked)}
                 onBlur={onBlur}
             />
-            <span className="slider" />
+            <span className="switch-slider" />
         </label>
     </Base>
 );
 
-/* ---------- NUMBER ---------- */
+// Number input renderer
 export const Number = ({ field, value, error, onChange, onBlur }: RendererProps<number>) => {
     const { min, max, step } = field.props ?? {};
     return (
@@ -174,13 +178,13 @@ export const Number = ({ field, value, error, onChange, onBlur }: RendererProps<
                 onChange={e => onChange(parseFloat(e.target.value) || 0)}
                 onBlur={onBlur}
                 placeholder={field.placeholder}
-                className={error ? 'inp err' : 'inp'}
+                className={error ? 'number-input error' : 'number-input'}
             />
         </Base>
     );
 };
 
-/* ---------- DATE ---------- */
+// Date input renderer
 export const Date = ({ field, value, error, onChange, onBlur }: RendererProps<string>) => {
     const { minDate, maxDate } = field.props ?? {};
     const min = minDate?.toISOString().split('T')[0];
@@ -194,20 +198,20 @@ export const Date = ({ field, value, error, onChange, onBlur }: RendererProps<st
                 max={max}
                 onChange={e => onChange(e.target.value)}
                 onBlur={onBlur}
-                className={error ? 'inp err' : 'inp'}
+                className={error ? 'date-input error' : 'date-input'}
             />
         </Base>
     );
 };
 
-/* ---------- FILE ---------- */
+// File input renderer with hidden input and custom UI
 export const File = ({ field, value, error, onChange, onBlur }: RendererProps<File | null>) => {
     const ref = useRef<HTMLInputElement>(null);
     const { accept, maxSize } = field.props ?? {};
 
-    const handle = (f: File | null) => {
-        if (f && maxSize && f.size > maxSize) return; // ignore oversized
-        onChange(f);
+    const handleFileChange = (file: File | null) => {
+        if (file && maxSize && file.size > maxSize) return; // Ignore if oversized
+        onChange(file);
     };
 
     return (
@@ -216,23 +220,28 @@ export const File = ({ field, value, error, onChange, onBlur }: RendererProps<Fi
                 ref={ref}
                 type="file"
                 accept={accept}
-                onChange={e => handle(e.target.files?.[0] ?? null)}
+                onChange={e => handleFileChange(e.target.files?.[0] ?? null)}
                 onBlur={onBlur}
-                style={{ display: 'none' }}
+                className="file-input-hidden"
             />
             {!value ? (
-                <button type="button" className="file-btn" onClick={() => ref.current?.click()}>
-                    Choose file…
-                </button>
+                <label className={error ? 'file-input-label error' : 'file-input-label'} onClick={() => ref.current?.click()}>
+                    <span className="file-input-text">Choose file…</span>
+                    <span className="file-input-button">Browse</span>
+                </label>
             ) : (
-                <div className="file-sel">
-                    <span>{value.name}</span>
-                    <button type="button" onClick={() => { onChange(null); if (ref.current) ref.current.value = ''; }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"
-                            aria-hidden="true">
-                            <path fill="currentColor" d="M11.53 4.47a.75.75 0 0 0-1.06 0L8 6.94 5.53 4.47a.75.75 0 0 0-1.06 1.06L6.94 8 4.47 10.47a.75.75 0 1 0 1.06 1.06L8 9.06l2.47 2.47a.75.75 0 0 0 1.06-1.06L9.06 8l2.47-2.47a.75.75 0 0 0 0-1.06z" />
-                        </svg>
-
+                <div className={error ? 'file-selected error' : 'file-selected'}>
+                    <div className="file-info">
+                        <span className="file-name">{value.name}</span>
+                        <span className="file-size">{(value.size / 1024).toFixed(2)} KB</span>
+                    </div>
+                    <button
+                        type="button"
+                        className="file-remove"
+                        onClick={() => { onChange(null); if (ref.current) ref.current.value = ''; }}
+                        aria-label="Remove file"
+                    >
+                        Remove
                     </button>
                 </div>
             )}
@@ -240,27 +249,29 @@ export const File = ({ field, value, error, onChange, onBlur }: RendererProps<Fi
     );
 };
 
-/* ---------- MULTISELECT ---------- */
+// Multiselect renderer
 export const Multiselect = ({ field, value = [], error, onChange }: RendererProps<any[]>) => {
-    const opts = (field.props?.data ?? []).map(o =>
+    const options = (field.props?.data ?? []).map(o =>
         typeof o === 'string' ? { label: o, value: o } : o
     );
-    const toggle = (v: any) => {
-        onChange(value.includes(v) ? value.filter(x => x !== v) : [...value, v]);
+    const toggleValue = (val: any) => {
+        onChange(value.includes(val) ? value.filter(x => x !== val) : [...value, val]);
     };
     return (
         <Base field={field} error={error}>
-            <div className="multi">
-                {opts.map((o, i) => (
-                    <label key={i} className="multi-opt">
-                        <input
-                            type="checkbox"
-                            checked={value.includes(o.value)}
-                            onChange={() => toggle(o.value)}
-                        />
-                        {o.label}
-                    </label>
-                ))}
+            <div className="multiselect-container">
+                <div className="multiselect-options">
+                    {options.map((option, index) => (
+                        <label key={index} className="multiselect-option">
+                            <input
+                                type="checkbox"
+                                checked={value.includes(option.value)}
+                                onChange={() => toggleValue(option.value)}
+                            />
+                            {option.label}
+                        </label>
+                    ))}
+                </div>
             </div>
         </Base>
     );

@@ -1,5 +1,6 @@
 import { FormEngine } from '../engine/FormEngine';
-import { surveyFormSchema as schema} from '../../formSchemas';
+import { insuranceQuoteSchema as schema} from '../../formSchemas';
+
 export const Demo = () => {
     return (
         <FormEngine
