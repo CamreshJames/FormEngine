@@ -157,6 +157,8 @@ interface Props {
     onSubmit?: (v: FormValues) => void;
     onChange?: (v: FormValues, e: FormErrors) => void;
     className?: string;
+    primaryColor?: string;
+    secondaryColor?: string;
 }
 
 // Main FormEngine component
@@ -166,6 +168,8 @@ export const FormEngine: React.FC<Props> = ({
     onSubmit,
     onChange,
     className = '',
+    primaryColor,
+    secondaryColor,
 }) => {
     // Compute default values from schema
     const defaults = Object.entries(schema.fields).reduce((accumulator, [fieldId, field]) => {
@@ -177,12 +181,82 @@ export const FormEngine: React.FC<Props> = ({
     const [errors, setErrors] = useState<FormErrors>({});
     const [touched, setTouched] = useState<Set<string>>(new Set());
 
+    // Clear values for fields that are no longer visible
+    useEffect(() => {
+        const newValues = { ...values };
+        let hasChanges = false;
+
+        Object.entries(schema.fields).forEach(([fieldId, field]) => {
+            if (!isVisible(field, values) && values[fieldId] !== undefined) {
+                delete newValues[fieldId];
+                hasChanges = true;
+            }
+        });
+
+        if (hasChanges) {
+            setValues(newValues);
+        }
+    }, [schema, values]);
+
     // Validate form on value or schema changes
     useEffect(() => {
         const formErrors = validateForm(schema, values);
         setErrors(formErrors);
         onChange?.(values, formErrors);
     }, [values, schema, onChange]);
+
+    // Helper function to convert hex to RGB
+    const hexToRgb = (hex: string) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : null;
+    };
+
+    // Helper function to darken a color
+    const darkenColor = (hex: string, amount: number = 20) => {
+        const rgb = hexToRgb(hex);
+        if (!rgb) return hex;
+        
+        const darken = (value: number) => Math.max(0, value - amount);
+        const toHex = (value: number) => value.toString(16).padStart(2, '0');
+        
+        return `#${toHex(darken(rgb.r))}${toHex(darken(rgb.g))}${toHex(darken(rgb.b))}`;
+    };
+
+    // Apply color theming
+    useEffect(() => {
+        const schemaPrimary = schema.meta.theme?.primaryColor;
+        const schemaSecondary = schema.meta.theme?.secondaryColor;
+        const finalPrimary = primaryColor || schemaPrimary;
+        const finalSecondary = secondaryColor || schemaSecondary;
+
+        if (finalPrimary || finalSecondary) {
+            const root = document.documentElement;
+            if (finalPrimary) {
+                const rgb = hexToRgb(finalPrimary);
+                root.style.setProperty('--form-primary', finalPrimary);
+                root.style.setProperty('--form-primary-hover', darkenColor(finalPrimary));
+                root.style.setProperty('--form-border-focus', finalPrimary);
+                
+                if (rgb) {
+                    // Create light version with opacity
+                    root.style.setProperty('--form-primary-light', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`);
+                }
+            }
+            if (finalSecondary) {
+                const rgb = hexToRgb(finalSecondary);
+                root.style.setProperty('--form-text-secondary', finalSecondary);
+                
+                if (rgb) {
+                    // Create very light version for backgrounds
+                    root.style.setProperty('--form-bg-secondary', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.05)`);
+                }
+            }
+        }
+    }, [primaryColor, secondaryColor, schema.meta.theme]);
 
     // Handle field change
     const handleChange = useCallback((fieldId: string, newValue: any) => {

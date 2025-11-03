@@ -78,6 +78,10 @@ export interface FormMeta {
     title?: string;
     subtitle?: string;
     description?: string;
+    theme?: {
+        primaryColor?: string;
+        secondaryColor?: string;
+    };
 }
 
 export interface FormSchema {

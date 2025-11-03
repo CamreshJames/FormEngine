@@ -1277,6 +1277,10 @@ export const insuranceQuoteSchema: any = {
   meta: {
     title: 'Get Insurance Quote',
     subtitle: 'Fill in your details for a personalized quote',
+    theme: {
+      primaryColor: "#7c3aed", // violet-600
+      secondaryColor: "#64748b"  // slate-500
+    }
   },
   fields: {
     insuranceType: {
@@ -1591,29 +1595,129 @@ export const insuranceQuoteSchema: any = {
     },
   ],
 }
+
 export const surveyFormSchema: any = {
     id: "survey-form",
     meta: {
         title: "Take a Survey",
-        subtitle: " Lets hear your Opinion"
+        subtitle: "Let's hear your Opinion",
+        theme: {
+            primaryColor: "#00ffaaff", 
+            secondaryColor: "#6b7280"
+        }
     },
     fields: {
         name: {
             id: "name",
             label: "Full Name",
             renderer: "text",
-            placeholder: "Enter your Full name",
-            rules:{
-                required: "Please enter your Full Name before unfocusing",
-                minLength: { value: 3, message: "name must be at least 3 characters"}
+            placeholder: "Enter your full name",
+            rules: {
+                required: "Please enter your full name",
+                minLength: { value: 3, message: "Name must be at least 3 characters"}
             },
         },
+        email: {
+            id: "email",
+            label: "Email Address",
+            renderer: "text",
+            inputType: "email",
+            placeholder: "your@email.com",
+            rules: {
+                required: "Email is required",
+                pattern: {
+                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                    message: "Invalid email address"
+                }
+            }
+        },
+        satisfaction: {
+            id: "satisfaction",
+            label: "How satisfied are you with our service?",
+            renderer: "radio",
+            props: {
+                options: [
+                    { label: "Very Satisfied", value: "very_satisfied" },
+                    { label: "Satisfied", value: "satisfied" },
+                    { label: "Neutral", value: "neutral" },
+                    { label: "Dissatisfied", value: "dissatisfied" },
+                    { label: "Very Dissatisfied", value: "very_dissatisfied" }
+                ]
+            },
+            rules: {
+                required: "Please select your satisfaction level"
+            }
+        },
+        wouldRecommend: {
+            id: "wouldRecommend",
+            label: "Would you recommend us to others?",
+            renderer: "switch",
+            defaultValue: false
+        },
+        improvementAreas: {
+            id: "improvementAreas",
+            label: "What areas need improvement?",
+            renderer: "multiselect",
+            visibleWhen: {
+                field: "satisfaction",
+                op: "in",
+                value: ["neutral", "dissatisfied", "very_dissatisfied"]
+            },
+            props: {
+                data: [
+                    "Customer Service",
+                    "Product Quality",
+                    "Pricing",
+                    "Delivery Speed",
+                    "Website Experience",
+                    "Communication"
+                ]
+            }
+        },
+        additionalComments: {
+            id: "additionalComments",
+            label: "Additional Comments",
+            renderer: "textarea",
+            placeholder: "Tell us more about your experience...",
+            props: {
+                minRows: 4,
+                maxRows: 8
+            }
+        }
     },
-    layout:[{
-        kind: "grid",
-        spacing: "md",
-        children: [
-            { kind: "field", fieldId: "name"}
-        ]
-    }]
+    layout: [
+        {
+            kind: "section",
+            title: "Personal Information",
+            withDivider: true,
+            children: [
+                {
+                    kind: "grid",
+                    cols: 2,
+                    spacing: "md",
+                    children: [
+                        { kind: "field", fieldId: "name" },
+                        { kind: "field", fieldId: "email" }
+                    ]
+                }
+            ]
+        },
+        {
+            kind: "section",
+            title: "Feedback",
+            withDivider: true,
+            children: [
+                {
+                    kind: "stack",
+                    spacing: "lg",
+                    children: [
+                        { kind: "field", fieldId: "satisfaction" },
+                        { kind: "field", fieldId: "wouldRecommend" },
+                        { kind: "field", fieldId: "improvementAreas" },
+                        { kind: "field", fieldId: "additionalComments" }
+                    ]
+                }
+            ]
+        }
+    ]
 }

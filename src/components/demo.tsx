@@ -23,7 +23,7 @@ const schemas = {
 };
 
 export const Demo = () => {
-  const [selectedSchema, setSelectedSchema] = useState<keyof typeof schemas>('insuranceQuote');
+  const [selectedSchema, setSelectedSchema] = useState<keyof typeof schemas>('surveyForm');
 
   return (
     <div className="p-4 space-y-4">
@@ -40,6 +40,7 @@ export const Demo = () => {
       </select>
 
       <FormEngine
+        key={selectedSchema} // Force re-render when schema changes to clear state
         schema={schemas[selectedSchema]}
         onSubmit={values => {
           console.log('Submitted values:', values);
