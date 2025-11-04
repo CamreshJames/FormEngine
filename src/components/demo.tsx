@@ -42,9 +42,18 @@ export const Demo = () => {
       <FormEngine
         key={selectedSchema} // Force re-render when schema changes to clear state
         schema={schemas[selectedSchema]}
-        onSubmit={values => {
+        onSubmit={async (values) => {
           console.log('Submitted values:', values);
-          alert('Check console - form submitted!');
+          
+          // Simulate async submission with potential error
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Randomly fail to demonstrate error handling
+          if (Math.random() > 0.7) {
+            throw new Error('Simulated server error - please try again');
+          }
+          
+          alert('Form submitted successfully! Check console for values.');
         }}
       />
     </div>

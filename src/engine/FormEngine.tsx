@@ -120,8 +120,16 @@ const LayoutNodeRenderer: React.FC<{
             return (
                 <div className={`layout-stack ${spacingClass}`}>
                     {node.children?.map((child, index) => (
-                        <LayoutNodeRenderer key={index} node={child} schema={schema} values={values} errors={errors}
-                            touched={touched} onChange={onChange} onBlur={onBlur} />
+                        <LayoutNodeRenderer 
+                            key={child.fieldId || `${child.kind}-${index}`} 
+                            node={child} 
+                            schema={schema} 
+                            values={values} 
+                            errors={errors}
+                            touched={touched} 
+                            onChange={onChange} 
+                            onBlur={onBlur} 
+                        />
                     ))}
                 </div>
             );
@@ -130,8 +138,16 @@ const LayoutNodeRenderer: React.FC<{
             return (
                 <div className={`layout-grid ${spacingClass}`} style={{ gridTemplateColumns: `repeat(${node.cols ?? 2}, 1fr)` }}>
                     {node.children?.map((child, index) => (
-                        <LayoutNodeRenderer key={index} node={child} schema={schema} values={values} errors={errors}
-                            touched={touched} onChange={onChange} onBlur={onBlur} />
+                        <LayoutNodeRenderer 
+                            key={child.fieldId || `${child.kind}-${index}`} 
+                            node={child} 
+                            schema={schema} 
+                            values={values} 
+                            errors={errors}
+                            touched={touched} 
+                            onChange={onChange} 
+                            onBlur={onBlur} 
+                        />
                     ))}
                 </div>
             );
@@ -156,8 +172,16 @@ const LayoutNodeRenderer: React.FC<{
                     {!collapsed && (
                         <div>
                             {node.children?.map((child, index) => (
-                                <LayoutNodeRenderer key={index} node={child} schema={schema} values={values} errors={errors}
-                                    touched={touched} onChange={onChange} onBlur={onBlur} />
+                                <LayoutNodeRenderer 
+                                    key={child.fieldId || `${child.kind}-${index}`} 
+                                    node={child} 
+                                    schema={schema} 
+                                    values={values} 
+                                    errors={errors}
+                                    touched={touched} 
+                                    onChange={onChange} 
+                                    onBlur={onBlur} 
+                                />
                             ))}
                         </div>
                     )}
@@ -201,6 +225,7 @@ export const FormEngine: React.FC<Props> = ({
     const [errors, setErrors] = useState<FormErrors>({});
     const [touched, setTouched] = useState<Set<string>>(new Set());
     const [submitting, setSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     // Memoize visibility map to avoid O(n) calculations on every render
     const visibilityMap = useMemo(() => {
@@ -265,36 +290,54 @@ export const FormEngine: React.FC<Props> = ({
         return `#${toHex(darken(rgb.r))}${toHex(darken(rgb.g))}${toHex(darken(rgb.b))}`;
     };
 
-    // Apply color theming
+    // Apply class-based theming (no global pollution)
     useEffect(() => {
+        if (!formRef.current) return;
+
+        const formElement = formRef.current;
         const schemaPrimary = schema.meta.theme?.primaryColor;
         const schemaSecondary = schema.meta.theme?.secondaryColor;
         const finalPrimary = primaryColor || schemaPrimary;
         const finalSecondary = secondaryColor || schemaSecondary;
 
+        // Remove any existing theme class
+        formElement.classList.remove('form-themed');
+
         if (finalPrimary || finalSecondary) {
-            const root = document.documentElement;
+            formElement.classList.add('form-themed');
+            
             if (finalPrimary) {
                 const rgb = hexToRgb(finalPrimary);
-                root.style.setProperty('--form-primary', finalPrimary);
-                root.style.setProperty('--form-primary-hover', darkenColor(finalPrimary));
-                root.style.setProperty('--form-border-focus', finalPrimary);
+                formElement.style.setProperty('--form-primary', finalPrimary);
+                formElement.style.setProperty('--form-primary-hover', darkenColor(finalPrimary));
+                formElement.style.setProperty('--form-border-focus', finalPrimary);
 
                 if (rgb) {
-                    // Create light version with opacity
-                    root.style.setProperty('--form-primary-light', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`);
+                    formElement.style.setProperty('--form-primary-light', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`);
                 }
             }
             if (finalSecondary) {
                 const rgb = hexToRgb(finalSecondary);
-                root.style.setProperty('--form-text-secondary', finalSecondary);
+                formElement.style.setProperty('--form-text-secondary', finalSecondary);
 
                 if (rgb) {
-                    // Create very light version for backgrounds
-                    root.style.setProperty('--form-bg-secondary', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.05)`);
+                    formElement.style.setProperty('--form-bg-secondary', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.05)`);
                 }
             }
         }
+
+        // Cleanup function
+        return () => {
+            if (formElement) {
+                formElement.classList.remove('form-themed');
+                formElement.style.removeProperty('--form-primary');
+                formElement.style.removeProperty('--form-primary-hover');
+                formElement.style.removeProperty('--form-border-focus');
+                formElement.style.removeProperty('--form-primary-light');
+                formElement.style.removeProperty('--form-text-secondary');
+                formElement.style.removeProperty('--form-bg-secondary');
+            }
+        };
     }, [primaryColor, secondaryColor, schema.meta.theme]);
 
     // Handle field change
@@ -320,9 +363,11 @@ export const FormEngine: React.FC<Props> = ({
 
         if (Object.keys(formErrors).length === 0) {
             try {
+                setSubmitError(null); // Clear previous errors
                 await onSubmit?.(values);
             } catch (error) {
                 console.error('Form submission error:', error);
+                setSubmitError(error instanceof Error ? error.message : 'An error occurred during submission');
             }
         }
         setSubmitting(false);
@@ -354,6 +399,12 @@ export const FormEngine: React.FC<Props> = ({
                     />
                 ))}
             </div>
+
+            {submitError && (
+                <div className="form-submit-error" role="alert">
+                    {submitError}
+                </div>
+            )}
 
             {onSubmit && (
                 <footer className="form-footer">

@@ -10,17 +10,18 @@ interface BaseProps {
 }
 const Base = ({ field, error, children }: BaseProps) => {
     const errorId = error ? `${field.id}-error` : undefined;
-    
+
     return (
         <div className="field-container">
             <label className="field-label" htmlFor={field.id}>
                 {field.label}
                 {field.rules?.required && <span className="required">*</span>}
             </label>
-            {React.isValidElement(children) 
+            {React.isValidElement(children)
                 ? React.cloneElement(children, {
                     id: field.id,
                     'aria-describedby': errorId,
+                    'aria-invalid': !!error,
                 } as any)
                 : children
             }
@@ -82,9 +83,11 @@ export const Select = ({ field, value, error, onChange, onBlur }: {
         typeof o === 'string' ? { label: o, value: o } : o
     );
     const [open, setOpen] = useState(false);
+    const [focusedIndex, setFocusedIndex] = useState(-1);
     const ref = useRef<HTMLDivElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const handleCloseRef = useRef<(event: MouseEvent) => void>(() => {});
+    const handleCloseRef = useRef<(event: MouseEvent) => void>(() => { });
     handleCloseRef.current = (event: MouseEvent) => {
         if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
     };
@@ -95,13 +98,20 @@ export const Select = ({ field, value, error, onChange, onBlur }: {
         return () => document.removeEventListener('mousedown', handler);
     }, [open]);
 
+    // Focus first option when dropdown opens
+    useEffect(() => {
+        if (open && options.length > 0) {
+            setFocusedIndex(0);
+        }
+    }, [open, options.length]);
+
     const selectedLabel = options.find(o => o.value === value)?.label ?? field.placeholder ?? 'Select…';
 
     return (
         <Base field={field} error={error}>
             <div ref={ref} className="select-container">
-                <div 
-                    className="select-trigger" 
+                <div
+                    className="select-trigger"
                     onClick={() => setOpen(!open)}
                     role="combobox"
                     aria-expanded={open}
@@ -113,6 +123,18 @@ export const Select = ({ field, value, error, onChange, onBlur }: {
                             setOpen(!open);
                         } else if (e.key === 'Escape') {
                             setOpen(false);
+                        } else if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            if (!open) {
+                                setOpen(true);
+                            } else {
+                                setFocusedIndex(prev => Math.min(prev + 1, options.length - 1));
+                            }
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            if (open) {
+                                setFocusedIndex(prev => Math.max(prev - 1, 0));
+                            }
                         }
                     }}
                 >
@@ -120,15 +142,15 @@ export const Select = ({ field, value, error, onChange, onBlur }: {
                     <span className={open ? 'select-arrow open' : 'select-arrow'}>▼</span>
                 </div>
                 {open && (
-                    <div className="select-dropdown" role="listbox">
+                    <div ref={dropdownRef} className="select-dropdown" role="listbox">
                         {options.map((option, index) => (
                             <div
                                 key={index}
-                                className={`select-option ${option.value === value ? 'selected' : ''}`}
+                                className={`select-option ${option.value === value ? 'selected' : ''} ${index === focusedIndex ? 'focused' : ''}`}
                                 onClick={() => { onChange(option.value); setOpen(false); onBlur?.(); }}
                                 role="option"
                                 aria-selected={option.value === value}
-                                tabIndex={0}
+                                tabIndex={-1}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') {
                                         e.preventDefault();
@@ -220,8 +242,21 @@ export const Number = ({ field, value, error, onChange, onBlur }: RendererProps<
                 min={min}
                 max={max}
                 step={step}
-                onChange={e => onChange(parseFloat(e.target.value) || 0)}
-                onBlur={onBlur}
+                onChange={e => {
+                    const val = e.target.value;
+                    if (val === '') {
+                        onChange(undefined as any); // Keep empty until blur
+                    } else {
+                        const parsed = parseFloat(val);
+                        onChange(isNaN(parsed) ? 0 : parsed);
+                    }
+                }}
+                onBlur={() => {
+                    if (value === undefined || value === null) {
+                        onChange(0); // Coerce to 0 on blur if empty
+                    }
+                    onBlur?.();
+                }}
                 placeholder={field.placeholder}
                 className={error ? 'number-input error' : 'number-input'}
             />
@@ -232,8 +267,17 @@ export const Number = ({ field, value, error, onChange, onBlur }: RendererProps<
 // Date input renderer
 export const Date = ({ field, value, error, onChange, onBlur }: RendererProps<string>) => {
     const { minDate, maxDate } = field.props ?? {};
-    const min = minDate?.toISOString().split('T')[0];
-    const max = maxDate?.toISOString().split('T')[0];
+
+    // Fix timezone issue by using local date components
+    const formatDateForInput = (date: globalThis.Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const min = minDate ? formatDateForInput(minDate) : undefined;
+    const max = maxDate ? formatDateForInput(maxDate) : undefined;
     return (
         <Base field={field} error={error}>
             <input
