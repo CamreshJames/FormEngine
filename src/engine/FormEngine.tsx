@@ -1,8 +1,23 @@
 // FormEngine.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { FormSchema, FormValues, FormErrors, LayoutNode, FormField } from './types';
 import * as Renderers from './FieldRenderers';
+import { ErrorBoundary } from './ErrorBoundary';
 import './FormEngine.css';
+
+// Typed renderer registry to prevent runtime errors
+const RendererRegistry = {
+    text: Renderers.Text,
+    textarea: Renderers.Textarea,
+    select: Renderers.Select,
+    multiselect: Renderers.Multiselect,
+    radio: Renderers.Radio,
+    checkbox: Renderers.Checkbox,
+    switch: Renderers.Switch,
+    number: Renderers.Number,
+    date: Renderers.Date,
+    file: Renderers.File,
+} as const;
 
 // Utility to check if value is empty
 const isEmpty = (value: any) =>
@@ -35,7 +50,7 @@ const validateField = (field: FormField, value: any, formValues: FormValues): st
     return null;
 };
 
-// Check field visibility based on conditions
+// Check field visibility based on conditions (memoized per field)
 const isVisible = (field: FormField, values: FormValues): boolean => {
     if (!field.visibleWhen) return true;
     const conditions = Array.isArray(field.visibleWhen) ? field.visibleWhen : [field.visibleWhen];
@@ -80,18 +95,23 @@ const LayoutNodeRenderer: React.FC<{
             const field = schema.fields[node.fieldId];
             if (!field || !isVisible(field, values)) return null;
 
-            const Renderer = (Renderers as any)[field.renderer.charAt(0).toUpperCase() + field.renderer.slice(1)];
-            if (!Renderer) return <div>Unknown renderer: {field.renderer}</div>;
+            const Renderer = RendererRegistry[field.renderer] as React.ComponentType<any>;
+            if (!Renderer) {
+                console.error(`Unknown renderer: ${field.renderer}`);
+                return <div className="field-error">Unknown renderer: {field.renderer}</div>;
+            }
 
             return (
                 <div className="grid-item" style={{ gridColumn: node.colSpan ? `span ${node.colSpan}` : undefined }}>
-                    <Renderer
-                        field={field}
-                        value={values[node.fieldId]}
-                        error={touched.has(node.fieldId) ? errors[node.fieldId] : undefined}
-                        onChange={(newValue: any) => onChange(node.fieldId!, newValue)}
-                        onBlur={() => onBlur(node.fieldId!)}
-                    />
+                    <ErrorBoundary>
+                        <Renderer
+                            field={field}
+                            value={values[node.fieldId]}
+                            error={touched.has(node.fieldId) ? errors[node.fieldId] : undefined}
+                            onChange={(newValue: any) => onChange(node.fieldId!, newValue)}
+                            onBlur={() => onBlur(node.fieldId!)}
+                        />
+                    </ErrorBoundary>
                 </div>
             );
         }
@@ -180,23 +200,42 @@ export const FormEngine: React.FC<Props> = ({
     const [values, setValues] = useState<FormValues>({ ...defaults, ...initialValues });
     const [errors, setErrors] = useState<FormErrors>({});
     const [touched, setTouched] = useState<Set<string>>(new Set());
+    const [submitting, setSubmitting] = useState(false);
 
-    // Clear values for fields that are no longer visible
-    useEffect(() => {
-        const newValues = { ...values };
-        let hasChanges = false;
-
+    // Memoize visibility map to avoid O(n) calculations on every render
+    const visibilityMap = useMemo(() => {
+        const map = new Map<string, boolean>();
         Object.entries(schema.fields).forEach(([fieldId, field]) => {
-            if (!isVisible(field, values) && values[fieldId] !== undefined) {
-                delete newValues[fieldId];
-                hasChanges = true;
-            }
+            map.set(fieldId, isVisible(field, values));
         });
+        return map;
+    }, [schema.fields, values]);
 
-        if (hasChanges) {
-            setValues(newValues);
-        }
-    }, [schema, values]);
+    // Clear values for fields that are no longer visible (debounced)
+    const clearHiddenFieldsTimeoutRef = useRef<number>(0);
+    useEffect(() => {
+        window.clearTimeout(clearHiddenFieldsTimeoutRef.current);
+        clearHiddenFieldsTimeoutRef.current = window.setTimeout(() => {
+            const newValues = { ...values };
+            let hasChanges = false;
+
+            Object.entries(schema.fields).forEach(([fieldId]) => {
+                if (!visibilityMap.get(fieldId) && values[fieldId] !== undefined) {
+                    delete newValues[fieldId];
+                    hasChanges = true;
+                }
+            });
+
+            if (hasChanges) {
+                setValues(newValues);
+            }
+        }, 100); // Debounce to prevent rapid clearing
+
+        return () => window.clearTimeout(clearHiddenFieldsTimeoutRef.current);
+    }, [visibilityMap, values, schema.fields]);
+
+    // Add formRef for theming
+    const formRef = useRef<HTMLFormElement>(null);
 
     // Validate form on value or schema changes
     useEffect(() => {
@@ -219,10 +258,10 @@ export const FormEngine: React.FC<Props> = ({
     const darkenColor = (hex: string, amount: number = 20) => {
         const rgb = hexToRgb(hex);
         if (!rgb) return hex;
-        
+
         const darken = (value: number) => Math.max(0, value - amount);
         const toHex = (value: number) => value.toString(16).padStart(2, '0');
-        
+
         return `#${toHex(darken(rgb.r))}${toHex(darken(rgb.g))}${toHex(darken(rgb.b))}`;
     };
 
@@ -240,7 +279,7 @@ export const FormEngine: React.FC<Props> = ({
                 root.style.setProperty('--form-primary', finalPrimary);
                 root.style.setProperty('--form-primary-hover', darkenColor(finalPrimary));
                 root.style.setProperty('--form-border-focus', finalPrimary);
-                
+
                 if (rgb) {
                     // Create light version with opacity
                     root.style.setProperty('--form-primary-light', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`);
@@ -249,7 +288,7 @@ export const FormEngine: React.FC<Props> = ({
             if (finalSecondary) {
                 const rgb = hexToRgb(finalSecondary);
                 root.style.setProperty('--form-text-secondary', finalSecondary);
-                
+
                 if (rgb) {
                     // Create very light version for backgrounds
                     root.style.setProperty('--form-bg-secondary', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.05)`);
@@ -268,20 +307,31 @@ export const FormEngine: React.FC<Props> = ({
         setTouched(prevTouched => new Set(prevTouched).add(fieldId));
     }, []);
 
-    // Handle form submit
-    const handleSubmit = (event: React.FormEvent) => {
+    // Handle form submit with loading state
+    const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
+        if (submitting) return; // Prevent double submission
+
+        setSubmitting(true);
         const allIds = Object.keys(schema.fields);
         setTouched(new Set(allIds));
         const formErrors = validateForm(schema, values);
         setErrors(formErrors);
-        if (Object.keys(formErrors).length === 0) onSubmit?.(values);
+
+        if (Object.keys(formErrors).length === 0) {
+            try {
+                await onSubmit?.(values);
+            } catch (error) {
+                console.error('Form submission error:', error);
+            }
+        }
+        setSubmitting(false);
     };
 
     const isValid = Object.keys(errors).length === 0;
 
     return (
-        <form onSubmit={handleSubmit} className={`form-engine ${className}`}>
+        <form ref={formRef} onSubmit={handleSubmit} className={`form-engine ${className}`}>
             {schema.meta.title && (
                 <header className="form-header">
                     <h2 className="form-title">{schema.meta.title}</h2>
@@ -307,7 +357,14 @@ export const FormEngine: React.FC<Props> = ({
 
             {onSubmit && (
                 <footer className="form-footer">
-                    <button type="submit" className="form-submit" disabled={!isValid}>Submit</button>
+                    <button
+                        type="submit"
+                        className="form-submit"
+                        disabled={!isValid || submitting}
+                        aria-live="polite"
+                    >
+                        {submitting ? 'Submitting...' : 'Submit'}
+                    </button>
                     <p className="form-required-note">
                         <span className="required">*</span> Required fields
                     </p>

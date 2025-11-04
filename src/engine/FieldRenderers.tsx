@@ -8,16 +8,30 @@ interface BaseProps {
     error?: string;
     children: React.ReactNode;
 }
-const Base = ({ field, error, children }: BaseProps) => (
-    <div className="field-container">
-        <label className="field-label">
-            {field.label}
-            {field.rules?.required && <span className="required">*</span>}
-        </label>
-        {children}
-        {error && <div className="field-error">{error}</div>}
-    </div>
-);
+const Base = ({ field, error, children }: BaseProps) => {
+    const errorId = error ? `${field.id}-error` : undefined;
+    
+    return (
+        <div className="field-container">
+            <label className="field-label" htmlFor={field.id}>
+                {field.label}
+                {field.rules?.required && <span className="required">*</span>}
+            </label>
+            {React.isValidElement(children) 
+                ? React.cloneElement(children, {
+                    id: field.id,
+                    'aria-describedby': errorId,
+                } as any)
+                : children
+            }
+            {error && (
+                <div id={errorId} className="field-error" role="alert">
+                    {error}
+                </div>
+            )}
+        </div>
+    );
+};
 
 // Generic props for renderers
 type RendererProps<T = any> = {
@@ -29,7 +43,7 @@ type RendererProps<T = any> = {
 };
 
 // Text input renderer
-export const Text = ({ field, value, error, onChange, onBlur }: RendererProps<string>) => (
+export const Text = React.memo(({ field, value, error, onChange, onBlur }: RendererProps<string>) => (
     <Base field={field} error={error}>
         <input
             type={field.inputType || 'text'}
@@ -40,7 +54,7 @@ export const Text = ({ field, value, error, onChange, onBlur }: RendererProps<st
             className={error ? 'text-input error' : 'text-input'}
         />
     </Base>
-);
+));
 
 // Textarea renderer
 export const Textarea = ({ field, value, error, onChange, onBlur }: RendererProps<string>) => {
@@ -70,12 +84,15 @@ export const Select = ({ field, value, error, onChange, onBlur }: {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
 
+    const handleCloseRef = useRef<(event: MouseEvent) => void>(() => {});
+    handleCloseRef.current = (event: MouseEvent) => {
+        if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+
     useEffect(() => {
-        const handleClose = (event: MouseEvent) => {
-            if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-        };
-        if (open) document.addEventListener('mousedown', handleClose);
-        return () => document.removeEventListener('mousedown', handleClose);
+        const handler = (event: MouseEvent) => handleCloseRef.current?.(event);
+        if (open) document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
     }, [open]);
 
     const selectedLabel = options.find(o => o.value === value)?.label ?? field.placeholder ?? 'Select…';
@@ -83,17 +100,43 @@ export const Select = ({ field, value, error, onChange, onBlur }: {
     return (
         <Base field={field} error={error}>
             <div ref={ref} className="select-container">
-                <div className="select-trigger" onClick={() => setOpen(!open)}>
+                <div 
+                    className="select-trigger" 
+                    onClick={() => setOpen(!open)}
+                    role="combobox"
+                    aria-expanded={open}
+                    aria-haspopup="listbox"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setOpen(!open);
+                        } else if (e.key === 'Escape') {
+                            setOpen(false);
+                        }
+                    }}
+                >
                     <span className={value ? 'selected' : 'placeholder'}>{selectedLabel}</span>
                     <span className={open ? 'select-arrow open' : 'select-arrow'}>▼</span>
                 </div>
                 {open && (
-                    <div className="select-dropdown">
+                    <div className="select-dropdown" role="listbox">
                         {options.map((option, index) => (
                             <div
                                 key={index}
                                 className={`select-option ${option.value === value ? 'selected' : ''}`}
                                 onClick={() => { onChange(option.value); setOpen(false); onBlur?.(); }}
+                                role="option"
+                                aria-selected={option.value === value}
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        onChange(option.value);
+                                        setOpen(false);
+                                        onBlur?.();
+                                    }
+                                }}
                             >
                                 {option.label}
                             </div>
@@ -155,6 +198,8 @@ export const Switch = ({ field, value, error, onChange, onBlur }: RendererProps<
             <input
                 type="checkbox"
                 className="switch-input"
+                role="switch"
+                aria-checked={!!value}
                 checked={!!value}
                 onChange={e => onChange(e.target.checked)}
                 onBlur={onBlur}

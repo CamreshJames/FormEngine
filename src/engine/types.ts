@@ -40,10 +40,7 @@ export interface FieldProps {
     placeholder?: string;
 }
 
-export interface FormField {
-    id: string;
-    label: string;
-    renderer:
+export type RendererType = 
     | 'text'
     | 'textarea'
     | 'select'
@@ -54,6 +51,11 @@ export interface FormField {
     | 'number'
     | 'date'
     | 'file';
+
+export interface FormField {
+    id: string;
+    label: string;
+    renderer: RendererType;
     inputType?: 'text' | 'email' | 'password' | 'tel' | 'url';
     placeholder?: string;
     defaultValue?: any;
